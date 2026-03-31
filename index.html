@@ -1,0 +1,991 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>GeoBoost Territory Optimizer | ABInBev</title>
+
+  <script>
+    window.onerror = function(msg, url, line) {
+      if(msg.includes('ResizeObserver') || msg.includes('fetch')) return;
+      document.body.innerHTML = '<div style="background:#222;color:#ff5555;padding:20px;font-family:sans-serif;"><h3>Critical Error</h3><p>'+msg+'</p><p>Line: '+line+'</p></div>';
+    };
+  </script>
+
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" crossorigin="anonymous" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js" crossorigin="anonymous"></script>
+  
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" crossorigin="anonymous" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js" crossorigin="anonymous"></script>
+  
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" crossorigin="anonymous"></script>
+  
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/shpjs/4.0.4/shp.min.js" crossorigin="anonymous"></script>
+
+  <style>
+    :root{ --bg:#0b0b0c; --panel:#111114; --panel2:#17181b; --text:#eaeaf0; --muted:#9da3af; --accent:#ffd166; --accent2:#8ab4ff; --success:#4ade80; --err:#f87171; }
+    *{box-sizing:border-box}
+    html, body { margin:0; padding:0; width:100%; height:100%; overflow:hidden; background:var(--bg); color:var(--text); font-family:Inter,system-ui,sans-serif; }
+    .app { display:grid; grid-template-columns:380px 1fr; height:100%; width:100%; }
+    aside { background:linear-gradient(180deg,var(--panel),var(--panel2)); border-right:1px solid #1f2126; padding:12px; overflow-y:auto; height:100%; }
+    main { position:relative; height:100%; width:100%; }
+    #map { position:absolute; inset:0; z-index: 1; }
+    h1{font-size:16px;margin:0 0 4px;letter-spacing:0.2px; color:var(--accent);}
+    .sub{font-size:11px;color:var(--muted);margin-bottom:10px}
+    .card{background:#0f1013;border:1px solid #23242a;border-radius:12px;padding:10px;margin-bottom:10px;box-shadow:0 4px 12px rgba(0,0,0,.2)}
+    .row{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:6px}
+    .row>*{flex:1}
+    label{font-size:11px;color:var(--muted);display:block;margin-bottom:4px;font-weight:600}
+    input,select,button,textarea{width:100%;padding:8px;border-radius:6px;border:1px solid #2a2c34;background:#121318;color:var(--text);font-size:11px}
+    select[multiple]{height:120px}
+    button{cursor:pointer; transition: opacity 0.2s; border:none;}
+    button:hover{opacity:0.8}
+    button:disabled{opacity:0.3; cursor:not-allowed;}
+    button.primary{background:linear-gradient(135deg,var(--accent),#ffb703);color:#1a1a1a;font-weight:600}
+    button.ghost{background:#1b1c21;color:#ccc;border:1px solid #2a2c34}
+    button.action{background:#1f2937; color:var(--accent2); border:1px solid var(--accent2); font-weight:600;}
+    .pbi-badge { background:#facc15; color:#000; font-size:10px; padding:2px 6px; border-radius:4px; font-weight:bold; display:none; }
+    .map-badge { background:#2563eb; color:#fff; font-size:10px; padding:2px 6px; border-radius:4px; font-weight:bold; display:none; margin-left:4px;}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+    .tabs{display:flex;gap:6px;margin-bottom:10px}
+    .tab{flex:1;text-align:center;padding:8px;border-radius:6px;border:1px solid #2a2c34;background:#121318;cursor:pointer;font-size:11px}
+    .tab.active{background:#1d1f25;border-color:#555;color:#fff;font-weight:600}
+    .legend{display:flex;flex-wrap:wrap;gap:4px;margin-top:8px}
+    .legend .item{display:flex;align-items:center;gap:4px;background:#14151a;border:1px solid #2a2c34;border-radius:99px;padding:2px 8px;font-size:10px}
+    .swatch{width:10px;height:10px;border-radius:2px}
+    .table-wrap{max-height:220px;overflow:auto;border:1px solid #2a2c34;border-radius:8px;margin-top:8px}
+    table{width:100%;border-collapse:collapse;font-size:10px;color:#eaeaf0}
+    th,td{padding:6px 8px;border-bottom:1px solid #2a2c34;white-space:nowrap;text-align:left}
+    th{background:#1d1f25;position:sticky;top:0;color:var(--muted)}
+    tbody tr:hover{background:rgba(255,255,255,0.05);cursor:pointer}
+    .status-msg { font-size:11px; padding:8px; border-radius:6px; margin-bottom:10px; background:#1f2937; border:1px solid #374151; color:#ccc; display:none; }
+    .status-msg.ok { border-color:var(--success); color:var(--success); background:rgba(74, 222, 128, 0.1); }
+    .status-msg.err { border-color:var(--err); color:var(--err); background:rgba(248, 113, 113, 0.1); }
+  </style>
+</head>
+<body>
+<div class="app">
+  <aside>
+    <h1>GeoBoost | GBS Commercial Solution<span id="pbiBadge" class="pbi-badge">PBI DATA</span> <span id="mapBadge" ></span></h1>
+    <div class="sub">Dynamic Territory Management Tool</div>
+    <div id="statusBox" class="status-msg"></div>
+
+    
+
+    <div class="card">
+      <label>1. Map Shapes (Auto-Loaded)</label>
+      <div id="manualShapeBox" style="display:none;">
+        <input id="shapeFile" type="file" accept=".json,.geojson,.zip" />
+        <div style="text-align:center; margin:6px 0; font-size:10px; color:#555;">- OR -</div>
+      </div>
+      <div id="mapStatus" style="padding:8px; background:#374151; border-radius:6px; margin-bottom:8px; font-size:11px; color:#a5f3fc;">
+        <span id="mapStatusText">Loading Embedded Map...</span>
+      </div>
+      <select id="propKeySelect" style="margin-top:6px"></select>
+    </div>
+
+    <div class="card">
+      <label>2. Data & Filters</label>
+      <div id="pbiStatus" style="display:none; padding:8px; background:#374151; border-radius:6px; margin-bottom:8px; font-size:11px; color:#a5f3fc;">
+        Data loaded from Power BI
+      </div>
+      <div id="manualUploadBox">
+        <input id="bdrCsv" type="file" accept=".csv,.xlsx" />
+      </div>
+      <div class="row" style="margin-top:6px">
+        <div><span style="font-size:9px;color:#888">PC Col:</span><select id="colCode"></select></div>
+        <div><span style="font-size:9px;color:#888">BDR Col:</span><select id="colBDR"></select></div>
+      </div>
+      <label style="margin-top:8px">Filter View by BDR</label>
+      <select id="filterBDR" multiple></select>
+      <label style="margin-top:8px">Filter by Date</label>
+<input type="date" id="filterDate" />
+      <select id="viewMode">
+  <option value="daily">Daily</option>
+  <option value="monthly">Monthly</option>
+</select>
+      <div class="grid" style="margin-top:6px">
+        <button id="btnApplyFilters" class="primary">Apply Filter</button>
+        <button id="btnClearFilter" class="ghost">Reset Filter</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <label>3. Selection & Assignment</label>
+      <div class="grid" style="margin-bottom:8px;">
+        <button id="btnUndo" class="ghost" disabled>↩ Undo</button>
+        <button id="btnRedo" class="ghost" disabled>↪ Redo</button>
+      </div>
+      <button id="btnAutoFill" class="action" style="margin-bottom:8px; width:100%; padding:10px;">✨ Fill Unassigned Gaps</button>
+      <div class="grid">
+        <button id="btnSelectRect" class="ghost">Rectangle</button>
+        <button id="btnSelectLasso" class="ghost">Lasso</button>
+      </div>
+      <div class="grid" style="margin-top:6px">
+        <button id="btnSelectAll" class="ghost">Select All (Filtered)</button>
+        <button id="btnSelectVisible" class="ghost">Select Viewport</button>
+      </div>
+      <button id="btnClearSel" class="ghost" style="margin-top:6px">Clear Selection</button>
+      <select id="bdrSelect" style="margin-top:8px"><option value="">Select existing BDR</option></select>
+      <input id="bdrInput" placeholder="or type new BDR name" style="margin-top:6px"/>
+      <div class="grid" style="margin-top:6px">
+        <button id="btnAssign" class="primary">Assign Selected</button>
+        <button id="btnClearAssign" class="ghost">Clear Assignments</button>
+      </div>
+      <div class="legend" id="legend"></div>
+    </div>
+
+    <div class="card">
+      <label>4. Summary</label>
+      <button id="btnExport" class="ghost" style="margin-bottom:8px">Export CSV</button>
+      <div class="table-wrap">
+        <table>
+          <thead>
+<tr>
+  <th>BDR</th>
+<th>POCs</th>
+<th>Distance</th>
+<th>Visit Time</th>
+<th>Travel Time</th>
+<th>Workload %</th>
+</tr>
+</thead>
+          <tbody id="statsBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </aside>
+  <main><div id="map"></div></main>
+</div>
+
+<script>
+
+
+/* ======================================================= */
+
+/* --- Custom Math Functions (Replacing Turf.js) --- */
+const Utils = {
+  // Simple point in polygon (Ray casting)
+  isPointInPoly: function(pt, polyCoords) {
+    const x = pt[0], y = pt[1];
+    let inside = false;
+    for (let i = 0, j = polyCoords.length - 1; i < polyCoords.length; j = i++) {
+      const xi = polyCoords[i][0], yi = polyCoords[i][1];
+      const xj = polyCoords[j][0], yj = polyCoords[j][1];
+      const intersect = ((yi > y) != (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+      if (intersect) inside = !inside;
+    }
+    return inside;
+  },
+  
+  // Calculate distance between two points (Haversine approx)
+  distance: function(pt1, pt2) {
+    const R = 6371; // km
+    const dLat = (pt2[1]-pt1[1]) * Math.PI/180;
+    const dLon = (pt2[0]-pt1[0]) * Math.PI/180;
+    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+              Math.cos(pt1[1]*Math.PI/180) * Math.cos(pt2[1]*Math.PI/180) * Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
+  },
+
+  // Calculate polygon centroid (Simple average)
+  centroid: function(feature) {
+    if(!feature.geometry || !feature.geometry.coordinates) return null;
+    let coords = feature.geometry.coordinates;
+    if(feature.geometry.type === "MultiPolygon") coords = coords[0]; // Take first poly
+    
+    // Flatten if needed (Handle Polygon vs MultiPolygon)
+    let flat = [];
+    if(coords[0][0] instanceof Array) flat = coords[0];
+    else flat = coords;
+
+    let x = 0, y = 0, len = flat.length;
+    for(let i=0; i<len; i++) { x += flat[i][0]; y += flat[i][1]; }
+    return [x/len, y/len];
+  }
+};
+
+/* --- Global State --- */
+const state = {
+  map:null, draw:null, currentView:'asIs', 
+  shapes:null, propKey:null, shapeCodes:new Set(),
+  layers:{asIs:null, optimized:null}, selection:new Set(),
+  assignments:{asIs:new Map(), optimized:new Map()},
+  centroids:new Map(), features:new Map(), rawData: []
+};
+
+const palette = ['#4ade80','#60a5fa','#f472b6','#f97316','#facc15','#34d399','#c084fc','#fb7185','#22d3ee','#a3e635','#f43f5e','#10b981','#8b5cf6','#fde047','#38bdf8','#f59e0b'];
+const bdrColors = new Map();
+
+const History = {
+  stack: [], cursor: -1, maxLimit: 50,
+  capture() { return { asIs: Array.from(state.assignments.asIs.entries()), optimized: Array.from(state.assignments.optimized.entries()) }; },
+  push() {
+    if (this.cursor < this.stack.length - 1) this.stack = this.stack.slice(0, this.cursor + 1);
+    this.stack.push(this.capture());
+    if (this.stack.length > this.maxLimit) this.stack.shift(); else this.cursor++;
+    this.updateUI();
+  },
+  restore(snapshot) {
+    state.assignments.asIs = new Map(snapshot.asIs);
+    state.assignments.optimized = new Map(snapshot.optimized);
+    refreshDropdowns(); restyle(); renderSummary(); this.updateUI();
+  },
+  undo() { if (this.cursor > 0) { this.cursor--; this.restore(this.stack[this.cursor]); } },
+  redo() { if (this.cursor < this.stack.length - 1) { this.cursor++; this.restore(this.stack[this.cursor]); } },
+  updateUI() {
+    document.getElementById('btnUndo').disabled = this.cursor <= 0;
+    document.getElementById('btnRedo').disabled = this.cursor >= this.stack.length - 1;
+  },
+  reset() { this.stack = [this.capture()]; this.cursor = 0; this.updateUI(); }
+};
+
+/* --- Init --- */
+window.onload = () => {
+  state.map = L.map('map', { preferCanvas:true }).setView([52.13, 5.29], 7);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(state.map);
+  state.layers.asIs = L.geoJSON(null,{style:styleFn('asIs'), onEachFeature:featFn}).addTo(state.map);
+  state.layers.optimized = L.geoJSON(null,{style:styleFn('optimized'), onEachFeature:featFn});
+  initDraw();
+  
+  document.getElementById('btnUndo').onclick = () => History.undo();
+  document.getElementById('btnRedo').onclick = () => History.redo();
+  document.addEventListener('keydown', e => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); History.undo(); }
+    if ((e.ctrlKey || e.metaKey) && e.key === 'y') { e.preventDefault(); History.redo(); }
+  });
+  History.reset();
+
+  loadEmbeddedMap();
+
+  let attempts = 0;
+  const poll = setInterval(() => {
+    attempts++;
+    if (checkPowerBI() || attempts >= 30) clearInterval(poll);
+  }, 500);
+};
+
+function formatDateSafe(dateStr){
+  const d = new Date(dateStr);
+  if(isNaN(d)) return null;
+  return d.toISOString().slice(0,10);
+}
+
+async function loadEmbeddedMap() {
+  try {
+    const url = "https://sam-abi-2900.github.io/geoBoostV2/NL.json";
+
+    // const response = await fetch(url + "?t=" + Date.now()); // cache-buster
+    const response = await fetch(url); // cache-buster
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! Status: ${response.status}`);
+    }
+
+    const geo = await response.json();
+
+    if (geo.features) {
+      geo.features = geo.features.filter(
+        f => f.geometry && f.geometry.coordinates && f.geometry.coordinates.length > 0
+      );
+    }
+
+    state.shapes = geo.features
+      ? geo
+      : { type: 'FeatureCollection', features: geo.features || [] };
+
+    const props = Object.keys(state.shapes.features[0].properties);
+    const sel = document.getElementById('propKeySelect');
+
+    sel.innerHTML = props.map(p => `<option value="${p}">${p}</option>`).join("");
+
+    state.propKey =
+      props.find(p => /postal|code|zip|pc/i.test(p)) || props[0];
+
+    sel.value = state.propKey;
+
+    reloadShapes();
+
+    document.getElementById('mapStatusText').innerHTML =
+      "<b>Map Loaded</b>";
+    document.getElementById('mapBadge').style.display = 'inline-block';
+
+  } catch (e) {
+    console.warn("GitHub load failed:", e);
+
+    document.getElementById('manualShapeBox').style.display = 'block';
+    document.getElementById('mapStatus').style.display = 'none';
+
+    setStatus("Failed to load from GitHub. Please upload manually.", "ok");
+  }
+}
+
+function checkPowerBI() {
+  // if (window.GeoBoost_Input_NL && Array.isArray(window.GeoBoost_Input_NL)) { connectPowerBI(window.GeoBoost_Input_NL); return true; } 
+  const powerBIData =
+  window.GeoBoost_Input_NL ||
+  window.powerBIData ||
+  window.dataset ||
+  window.data;
+
+if (Array.isArray(powerBIData)) {
+  connectPowerBI(powerBIData);
+}
+  try {
+    if (window.name) {
+      const data = JSON.parse(window.name);
+      if (Array.isArray(data)) { connectPowerBI(data); return true; }
+    }
+  } catch(e) {}
+  return false;
+}
+
+window.connectPowerBI = function(dataArray) {
+  if (!dataArray || !dataArray.length) return;
+  console.log("Power BI Data Found:", dataArray.length, "rows");
+  document.getElementById('manualUploadBox').style.display = 'none';
+  document.getElementById('pbiStatus').style.display = 'block';
+  document.getElementById('pbiBadge').style.display = 'inline-block';
+  state.rawData = dataArray.map(r => {
+
+  const zipRaw = String(r["ZIP"] ||r["Zip"] || '');
+  const zip = zipRaw.substring(0,4).replace(/\D/g,'');
+
+  const bdr = String(r["M1 Name"] || r["M1 Full Name"]).trim();
+
+  let cleanDate = '';
+  const rawDate = r["date"];
+
+  if(typeof rawDate === "number"){
+    const excelEpoch = new Date(Date.UTC(1899, 11, 30));
+    const realDate = new Date(excelEpoch.getTime() + rawDate * 86400000);
+    cleanDate = realDate.toISOString().slice(0,10);
+  } else {
+    cleanDate = String(rawDate || '').split(" ")[0].trim();
+  }
+
+  return {
+    zip: zip,
+    bdr: bdr,
+    originalBdr: bdr,
+
+    poc: String(r["customer_erp_code"] || 'customer_erp_code_x').trim(),
+
+    lat: parseFloat(r["latitude"]) || 0,
+    lon: parseFloat(r["longitude"]) || 0,
+    seq: parseInt(r["visit_sequence"]) || 0,
+    duration: parseFloat(r["Visit Duration"]) || parseFloat(["visit_duration"]) || 0,
+    travelTime: parseFloat(r["travel_time_min"]) || 0,
+    distance: parseFloat(r["distance_km"]) || 0,
+    date: cleanDate
+  };
+}).filter(r => r.zip && r.bdr && r.poc);
+
+  if(state.shapes) initColumns(); 
+  setStatus(`Data Loaded (${dataArray.length} rows).`, "ok");
+};
+
+document.getElementById('viewMode').onchange = () => renderSummary();
+
+/* --- Data Handling --- */
+document.getElementById('shapeFile').onchange = async e => {
+  const f = e.target.files[0];
+  const geo = f.name.endsWith('.zip') ? await shp(f) : JSON.parse(await f.text());
+  if(geo.features) geo.features = geo.features.filter(f => f.geometry && f.geometry.coordinates && f.geometry.coordinates.length > 0);
+  
+  state.shapes = geo.features ? geo : {type:'FeatureCollection',features:geo.features||[]};
+  const props = Object.keys(state.shapes.features[0].properties);
+  const sel = document.getElementById('propKeySelect');
+  sel.innerHTML = props.map(p => `<option value="${p}">${p}</option>`).join("");
+  state.propKey = props.find(p=>/postal|code|zip|pc/i.test(p)) || props[0];
+  sel.value = state.propKey;
+  
+  reloadShapes();
+  if(state.rawData.length > 0) initColumns();
+  document.getElementById('manualShapeBox').style.display = 'none';
+  document.getElementById('mapStatus').style.display = 'block';
+  document.getElementById('mapStatusText').innerHTML = "<b>Manual Map Loaded</b>";
+  document.getElementById('mapBadge').style.display = 'inline-block';
+};
+
+function reloadShapes(){
+  state.layers.asIs.clearLayers(); state.layers.optimized.clearLayers();
+  state.features.clear(); state.centroids.clear(); state.shapeCodes.clear();
+  state.layers.asIs.addData(state.shapes);
+  state.layers.optimized.addData(state.shapes);
+  state.shapes.features.forEach(f => {
+    const c = String(f.properties[state.propKey]||'').toUpperCase().replace(/\s/g,'');
+    if(c){ state.shapeCodes.add(c); state.features.set(c, f); }
+  });
+  state.map.fitBounds(L.geoJSON(state.shapes).getBounds().pad(0.1));
+  restyle();
+}
+
+
+function applyAssignmentsNew(){
+  state.assignments.asIs.clear();
+
+  state.rawData.forEach(r => {
+    if(r.zip && r.bdr){
+      state.assignments.asIs.set(r.zip, r.bdr);
+    }
+  });
+
+  refreshDropdowns();
+  restyle();
+  renderSummary();
+  History.reset();
+}
+
+document.getElementById('bdrCsv').onchange = async e => {
+  const f = e.target.files[0];
+
+  let raw = [];
+
+  if(f.name.match(/\.xls/)){
+    const d = await f.arrayBuffer();
+    const wb = XLSX.read(d,{type:'array'});
+    raw = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:''});
+  } else {
+    const lines = (await f.text()).split(/\n/).filter(x=>x.trim());
+    const h = lines[0].split(/[,\t]/).map(s=>s.trim());
+    raw = lines.slice(1).map(l=>{
+      const d=l.split(/[,\t]/).map(s=>s.trim());
+      const o={}; h.forEach((k,i)=>o[k]=d[i]); return o;
+    });
+  }
+
+
+  state.rawData = raw.map(r => {
+    const zipRaw = String(r["ZIP"] ||r["Zip"] || '');
+    const zip = zipRaw.substring(0,4).replace(/\D/g,'');
+
+    const bdr = String(r["M1 Name"] || r["M1 Full Name"]).trim();
+    let cleanDate = '';
+
+const raw = r["date"];
+
+
+if(typeof raw === "number"){
+  const excelEpoch = new Date(Date.UTC(1899, 11, 30));
+  const realDate = new Date(excelEpoch.getTime() + raw * 86400000);
+  cleanDate = realDate.toISOString().slice(0,10);
+}
+
+
+else {
+  cleanDate = String(raw || '').split(" ")[0].trim();
+}
+
+    return {
+  zip: zip,
+  bdr: bdr,
+  originalBdr: bdr,
+
+  poc: String(r["customer_erp_code"] || 'customer_erp_code_x').trim(),
+
+  lat: parseFloat(r["latitude"]) || 0,
+  lon: parseFloat(r["longitude"]) || 0,
+  seq: parseInt(r["visit_sequence"]) || 0,
+  duration: parseFloat(r["Visit Duration"]) || parseFloat(["visit_duration"]) || 0,
+  travelTime: parseFloat(r["travel_time_min"]) || 0,
+  distance: parseFloat(r["distance_km"]) || 0,
+  date: cleanDate
+};
+  }).filter(r => 
+  r.zip && 
+  r.bdr && 
+  r.poc
+);
+
+  applyAssignmentsNew();
+};
+
+function initColumns(){
+  if(!state.rawData || state.rawData.length === 0) return;
+  const keys = Object.keys(state.rawData[0]||{});
+  const selC = document.getElementById('colCode'), selB = document.getElementById('colBDR');
+  selC.innerHTML = keys.map(k=>`<option value="${k}">${k}</option>`).join("");
+  selB.innerHTML = keys.map(k=>`<option value="${k}">${k}</option>`).join("");
+  selC.value = keys.find(k=>/postal|code|Zip|pc/i.test(k))||keys[0];
+  selB.value = keys.find(k=>/person|bdr|rep/i.test(k))||keys[1];
+  applyAssignments();
+}
+
+function applyAssignments(){
+  const kC = document.getElementById('colCode').value, kB = document.getElementById('colBDR').value;
+  state.assignments.asIs.clear();
+  state.rawData.forEach(r=>{
+    const c = String(r[kC]||'').toUpperCase().replace(/\s/g,''), b = String(r[kB]||'').trim();
+    if(c && b) state.assignments.asIs.set(c,b);
+  });
+  refreshDropdowns(); restyle(); renderSummary();
+  History.reset(); 
+}
+
+/* --- GAP FILLER & SAFE CENTROID (Custom Math) --- */
+function getCentroid(c){
+  if(state.centroids.has(c)) return state.centroids.get(c);
+  const f = state.features.get(c);
+  if(!f) return null;
+  const pt = Utils.centroid(f);
+  if(pt) state.centroids.set(c, pt);
+  return pt;
+}
+
+document.getElementById('btnAutoFill').onclick = () => {
+  setStatus("Calculating...", "ok");
+  setTimeout(() => {
+    const viewMap = state.assignments[state.currentView];
+    const unassigned = [];
+    const assignedPts = [];
+    state.shapeCodes.forEach(code => {
+      const bdr = viewMap.get(code);
+      const pt = getCentroid(code);
+      if (!pt) return;
+      if (bdr && bdr.toString().trim() !== "") assignedPts.push({ code, bdr, pt: pt });
+      else unassigned.push({ code, pt: pt });
+    });
+
+    if (assignedPts.length === 0) return alert("No assigned BDRs found.");
+    if (unassigned.length === 0) return alert("No gaps found!");
+
+    let fillCount = 0;
+    unassigned.forEach(gap => {
+      let nearestBDR = null;
+      let minDst = Infinity;
+      
+      // Simple Nearest Neighbor Search
+      for(let i=0; i<assignedPts.length; i++) {
+        const dst = Utils.distance(gap.pt, assignedPts[i].pt);
+        if(dst < minDst) {
+          minDst = dst;
+          nearestBDR = assignedPts[i].bdr;
+        }
+      }
+      
+      if(nearestBDR) {
+        viewMap.set(gap.code, nearestBDR);
+        state.rawData.forEach(row => {
+  if(row.zip === gap.code){
+    row.bdr = nearestBDR;
+  }
+});
+        fillCount++;
+      }
+    });
+
+    refreshDropdowns(); restyle(); renderSummary(); setStatus(`Filled ${fillCount} gaps.`, "ok");
+    History.push(); 
+  }, 50);
+};
+
+/* --- Selection Logic (Custom Math) --- */
+function initDraw(){
+  if (typeof L.Control.Draw === 'undefined') return;
+  state.draw = new L.Control.Draw({ draw:{polyline:false,marker:false,circle:false,circlemarker:false,rectangle:{shapeOptions:{color:'#fff'}},polygon:{shapeOptions:{color:'#fff'}}}, edit:false });
+  state.map.on(L.Draw.Event.CREATED, e => {
+    const layer = e.layer;
+    state.map.removeLayer(layer);
+    
+    // Get Polygon Coordinates (LatLng)
+    let shapeCoords = [];
+    if(layer instanceof L.Polygon) {
+        // Convert LatLngs to [lng, lat] for comparison
+        shapeCoords = layer.getLatLngs()[0].map(ll => [ll.lng, ll.lat]);
+    } else if (layer instanceof L.Rectangle) {
+        shapeCoords = layer.getLatLngs()[0].map(ll => [ll.lng, ll.lat]);
+    } else {
+        return; // Only support Poly/Rect
+    }
+
+    state.features.forEach((feat, code) => {
+      const pt = getCentroid(code);
+      if(pt && Utils.isPointInPoly(pt, shapeCoords)) {
+          state.selection.add(code);
+      }
+    });
+    restyle();
+  });
+}
+
+document.getElementById('btnSelectRect').onclick=()=>new L.Draw.Rectangle(state.map).enable();
+document.getElementById('btnSelectLasso').onclick=()=>new L.Draw.Polygon(state.map).enable();
+document.getElementById('btnClearSel').onclick=()=>{ state.selection.clear(); restyle(); };
+
+document.getElementById('btnSelectAll').onclick=()=>{
+  const filters = getActiveFilters();
+  state.selection.clear();
+  state.assignments[state.currentView].forEach((bdr, code)=>{
+    if(filters.size === 0 || filters.has(bdr)) state.selection.add(code);
+  });
+  restyle();
+};
+
+document.getElementById('btnSelectVisible').onclick=()=>{
+  const bounds = state.map.getBounds();
+  state.selection.clear();
+  state.features.forEach((feat, code)=>{
+    const pt = getCentroid(code);
+    if(pt && bounds.contains([pt[1], pt[0]])) state.selection.add(code);
+  });
+  restyle();
+};
+
+
+document.getElementById('btnAssign').onclick = () => {
+  const val = document.getElementById('bdrSelect').value || 
+              document.getElementById('bdrInput').value.trim();
+
+  if(!val || !state.selection.size) return;
+
+  // update map
+  state.selection.forEach(c => {
+    state.assignments[state.currentView].set(c, val);
+  });
+
+
+  state.rawData.forEach(row => {
+    if(state.selection.has(row.zip)){
+      row.bdr = val;
+    }
+  });
+
+  refreshDropdowns();
+  restyle();
+  renderSummary();
+
+  History.push();
+};
+
+document.getElementById('btnClearAssign').onclick = () => {
+  state.selection.forEach(c => {
+    state.assignments[state.currentView].delete(c);
+  });
+
+  // update dataset
+  state.rawData.forEach(row => {
+    if(state.selection.has(row.zip)){
+      row.bdr = "";
+    }
+  });
+
+  restyle();
+  renderSummary();
+
+  History.push();
+};
+
+function styleFn(view){
+  return f => {
+    const c = String(f.properties[state.propKey]||'').toUpperCase().replace(/\s/g,'');
+    const bdr = state.assignments[view]?.get(c);
+    const filters = getActiveFilters();
+    if(filters.size > 0 && !filters.has(bdr)) return { fillOpacity: 0, opacity: 0, weight: 0, pointerEvents: 'none' };
+    const sel = state.selection.has(c);
+    return { color: sel?'#fff':'#444', weight: sel?2:0.5, fillColor: getColor(bdr), fillOpacity: bdr?0.7:0.1, opacity: 1, pointerEvents: 'auto' };
+  };
+}
+
+function featFn(f, l){
+  l.on('click', e => {
+    L.DomEvent.stopPropagation(e);
+    const c = String(f.properties[state.propKey]||'').toUpperCase().replace(/\s/g,'');
+    if(state.selection.has(c)) state.selection.delete(c); else state.selection.add(c);
+    restyle();
+  });
+  l.bindTooltip(()=>{
+    const c = String(f.properties[state.propKey]||'').toUpperCase().replace(/\s/g,'');
+    return `<b>${c}</b><br>${state.assignments[state.currentView].get(c)||'Unassigned'}`;
+  }, {sticky:true});
+}
+
+function getColor(b){
+  if(!b) return '#333';
+  if(!bdrColors.has(b)) bdrColors.set(b, palette[bdrColors.size%palette.length]);
+  return bdrColors.get(b);
+}
+
+function refreshDropdowns(){
+  const allBDRs = [...new Set([...state.assignments.asIs.values(), ...state.assignments.optimized.values()])].filter(Boolean).sort();
+  document.getElementById('bdrSelect').innerHTML = '<option value="">Select existing BDR</option>' + allBDRs.map(b=>`<option>${b}</option>`).join("");
+  document.getElementById('filterBDR').innerHTML = allBDRs.map(b=>`<option value="${b}">${b}</option>`).join("");
+  renderLegend(allBDRs);
+}
+
+function renderLegend(bdrs){
+  const el = document.getElementById('legend'); el.innerHTML = '';
+  bdrs.forEach(b => el.innerHTML += `<div class="item"><span class="swatch" style="background:${getColor(b)}"></span>${b}</div>`);
+}
+
+function getActiveFilters(){ return new Set([...document.getElementById('filterBDR').selectedOptions].map(o=>o.value)); }
+
+const dateEl = document.getElementById('filterDate');
+if(dateEl){
+  dateEl.onchange = () => renderSummary();
+}
+
+function renderSummary(){
+  const body = document.getElementById('statsBody');
+  const selectedDate = document.getElementById('filterDate')?.value;
+  const filters = getActiveFilters();
+  const mode = document.getElementById('viewMode')?.value || "daily";
+
+  const grouped = {};
+
+  state.rawData.forEach(r => {
+    if(!r.bdr || !r.date) return;
+
+    if(mode === "daily"){
+      if(selectedDate){
+        if((r.date || '').trim() !== selectedDate.trim()) return;
+      }
+    }
+
+    if(filters.size > 0 && !filters.has(r.bdr)) return;
+
+    const key = r.bdr;
+
+    if(!grouped[key]){
+      grouped[key] = {
+        bdr: r.bdr,
+        pocSet:new Set(),
+        pocCount: 0,
+        totalDistance: 0,
+        actualVisitTime: 0,
+        actualTravelTime: 0,
+        dateSet: new Set(),
+        hasReassignment: false
+      };
+    }
+
+
+    if(r.bdr !== r.originalBdr){
+      grouped[key].hasReassignment = true;
+    }
+
+
+  if(r.poc && r.poc.toLowerCase() !== "home"){
+  grouped[key].pocCount += 1;
+}
+
+    grouped[key].totalDistance += r.distance || 0;
+    grouped[key].actualTravelTime += r.travelTime || 0;
+
+
+    if(r.poc && r.poc.toLowerCase() !== "home"){
+      grouped[key].actualVisitTime += (r.duration || 0) * 60;
+    }
+
+    grouped[key].dateSet.add(r.date);
+  });
+
+  const rows = Object.values(grouped).map(g => {
+
+    let visitTime;
+    let travelTime;
+
+
+    if(g.hasReassignment){
+      const pocCount = g.pocCount;
+      console.log("poc count",pocCount)
+
+      visitTime = pocCount * 30; // 30 mins per POC
+
+      console.log("Visit Time",visitTime)
+
+      travelTime = g.totalDistance > 0
+        ? (g.totalDistance / 50) * 60   // 50 km/h
+        : 0;
+
+        console.log("travel time",travelTime);
+    }
+
+
+    else {
+      visitTime = g.actualVisitTime;
+      travelTime = g.actualTravelTime;
+    }
+
+    const totalWorkMin = visitTime + travelTime;
+
+    let capacityMin;
+
+    if(mode === "daily"){
+      capacityMin = 8 * 60;
+    } else {
+      const workingDays = g.dateSet.size || 1;
+      capacityMin = workingDays * 8 * 60;
+    }
+
+    const workload = capacityMin > 0 
+      ? ((totalWorkMin / capacityMin) * 100).toFixed(1)
+      : 0;
+
+
+    const color = workload > 90 ? 'red' : workload > 70 ? 'orange' : 'green';
+
+    return `
+      <tr>
+        <td>${g.bdr}</td>
+        <td>${g.pocCount}</td>
+        <td>${Math.round(g.totalDistance)} km</td>
+        <td>${Math.round(visitTime)} min</td>
+        <td>${Math.round(travelTime)} min</td>
+        <td style="color:${color}"><b>${workload}%</b></td>
+      </tr>
+    `;
+  });
+
+  body.innerHTML = rows.join("");
+}
+
+function restyle(){ 
+  state.layers.asIs.setStyle(styleFn('asIs')); 
+  state.layers.optimized.setStyle(styleFn('optimized')); 
+}
+
+document.getElementById('btnApplyFilters').onclick = () => { restyle(); renderSummary(); };
+document.getElementById('btnClearFilter').onclick = () => {
+
+
+  const sel = document.getElementById('filterBDR');
+  for(let i=0; i < sel.options.length; i++) {
+    sel.options[i].selected = false;
+  }
+
+  const dateEl = document.getElementById('filterDate');
+  if(dateEl){
+    dateEl.value = "";
+  }
+
+
+  restyle();
+  renderSummary();
+};
+
+// document.getElementById('viewTabs').onclick = e => {
+//   if(!e.target.dataset.view) return;
+//   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active')); e.target.classList.add('active');
+//   state.currentView = e.target.dataset.view;
+//   if(state.currentView === 'asIs'){ state.map.addLayer(state.layers.asIs); state.map.removeLayer(state.layers.optimized); }
+//   else { state.map.addLayer(state.layers.optimized); state.map.removeLayer(state.layers.asIs); }
+//   restyle(); renderSummary();
+// };
+
+// document.getElementById('btnSeed').onclick = () => { 
+//   state.assignments.optimized = new Map(state.assignments.asIs); 
+//   restyle(); renderSummary(); 
+//   History.push(); 
+// };
+
+document.getElementById('btnExport').onclick = () => {
+
+  const selectedDate = document.getElementById('filterDate')?.value;
+  const filters = getActiveFilters();
+  const mode = document.getElementById('viewMode')?.value || "daily";
+
+  const grouped = {};
+
+  state.rawData.forEach(r => {
+    if(!r.bdr || !r.date) return;
+
+    if(mode === "daily"){
+      if(selectedDate){
+        if((r.date || '').trim() !== selectedDate.trim()) return;
+      }
+    }
+
+    if(filters.size > 0 && !filters.has(r.bdr)) return;
+
+    const key = r.bdr;
+
+    if(!grouped[key]){
+      grouped[key] = {
+        bdr: r.bdr,
+        pocCount: 0,
+        totalDistance: 0,
+        actualVisitTime: 0,
+        actualTravelTime: 0,
+        dateSet: new Set(),
+        hasReassignment: false
+      };
+    }
+
+
+    if(r.bdr !== r.originalBdr){
+      grouped[key].hasReassignment = true;
+    }
+
+
+    if(r.poc && r.poc.toLowerCase() !== "home"){
+      grouped[key].pocCount += 1;
+      grouped[key].actualVisitTime += (r.duration || 0) * 60;
+    }
+
+
+    grouped[key].totalDistance += r.distance || 0;
+    grouped[key].actualTravelTime += r.travelTime || 0;
+
+    grouped[key].dateSet.add(r.date);
+  });
+
+
+  let csv = "BDR,POC_Count,Total_Distance_km,Visit_Time_min,Travel_Time_min,Workload_%,Status\n";
+
+  Object.values(grouped).forEach(g => {
+
+    let visitTime;
+    let travelTime;
+
+    if(g.hasReassignment){
+      visitTime = g.pocCount * 30;
+      travelTime = g.totalDistance > 0 ? (g.totalDistance / 50) * 60 : 0;
+    } else {
+      visitTime = g.actualVisitTime;
+      travelTime = g.actualTravelTime;
+    }
+
+    const totalWorkMin = visitTime + travelTime;
+
+    let capacityMin;
+    if(mode === "daily"){
+      capacityMin = 8 * 60;
+    } else {
+      const workingDays = g.dateSet.size || 1;
+      capacityMin = workingDays * 8 * 60;
+    }
+
+    const workload = capacityMin > 0 
+      ? ((totalWorkMin / capacityMin) * 100).toFixed(1)
+      : 0;
+
+    const status = g.hasReassignment ? "Reassigned" : "Unchanged";
+
+    csv += `"${g.bdr}",${g.pocCount},${Math.round(g.totalDistance)},${Math.round(visitTime)},${Math.round(travelTime)},${workload},${status}\n`;
+  });
+
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  const url = URL.createObjectURL(blob);
+
+  link.setAttribute('href', url);
+  link.setAttribute('download', `Workload_Summary_${new Date().toISOString().slice(0,10)}.csv`);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+};
+
+// document.getElementById('btnSaveProj').onclick=()=>{
+//   const proj = { propKey: state.propKey, shapes: state.shapes, assignments: { asIs: [...state.assignments.asIs], optimized: [...state.assignments.optimized] } };
+//   const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(proj)], {type:'application/json'})); a.download = 'project.json'; a.click();
+// };
+
+function setStatus(msg, type){
+  const el = document.getElementById('statusBox');
+  el.style.display='block'; el.innerHTML=msg; el.className=`status-msg ${type}`;
+}
+</script>
+</body>
+</html>
